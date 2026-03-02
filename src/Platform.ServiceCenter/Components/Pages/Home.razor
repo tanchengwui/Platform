@@ -1,0 +1,17 @@
+@page "/"
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Nav
+
+<p>Loading...</p>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        var isAuthed = state.User?.Identity?.IsAuthenticated == true;
+
+        // Landing page when authenticated
+        Nav.NavigateTo(isAuthed ? "/apps" : "/login", replace: true);
+    }
+}

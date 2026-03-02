@@ -1,0 +1,9 @@
+@inject NavigationManager Nav
+
+@code {
+    protected override void OnInitialized()
+    {
+        // force full reload so server-side circuit resets cleanly
+        Nav.NavigateTo("/login", forceLoad: true);
+    }
+}

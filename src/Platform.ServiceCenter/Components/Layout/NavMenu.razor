@@ -1,0 +1,67 @@
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/">Platform ServiceCenter</a>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="nav flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="/login">
+                <span class="bi bi-box-arrow-in-right" aria-hidden="true"></span> Login
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="/apps">
+                <span class="bi bi-grid-3x3-gap" aria-hidden="true"></span> Apps
+            </NavLink>
+        </div>
+<Can Permission="ENV_DEPLOY">
+    <ChildContent>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="/deployments">
+                <span class="bi bi-rocket-takeoff" aria-hidden="true"></span> Deployments
+            </NavLink>
+        </div>
+    </ChildContent>
+</Can>
+
+
+        <Can Permission="USER_ADMIN">
+            <ChildContent>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="/users">
+                        <span class="bi bi-people" aria-hidden="true"></span> Users
+                    </NavLink>
+                </div>
+            </ChildContent>
+        </Can>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="/logout">
+                <span class="bi bi-box-arrow-right" aria-hidden="true"></span> Logout
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="/counter">
+                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="/weather">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
+            </NavLink>
+        </div>
+    </nav>
+</div>

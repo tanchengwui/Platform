@@ -1,0 +1,37 @@
+@using Platform.ServiceCenter.Services
+@implements IDisposable
+@inject TokenStore Tokens
+@inject Platform.ServiceCenter.SimpleAuthStateProvider Auth
+
+@code {
+    private bool _done;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _done) return;
+        _done = true;
+
+        Tokens.Changed += OnTokensChanged;
+
+        await Tokens.InitializeAsync();
+        Apply();
+    }
+
+    private void OnTokensChanged()
+        => Apply();
+
+    private void Apply()
+    {
+        if (Tokens.IsLoggedIn && !string.IsNullOrWhiteSpace(Tokens.Token))
+            Auth.SignInFromJwt(Tokens.Token!, Tokens.Email);
+        else
+            Auth.SignOut();
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Tokens.Changed -= OnTokensChanged;
+    }
+}

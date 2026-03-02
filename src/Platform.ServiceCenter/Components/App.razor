@@ -1,0 +1,27 @@
+﻿@using Microsoft.AspNetCore.Components.Authorization
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- ✅ CORRECT bootstrap path -->
+    <link href="/lib/bootstrap/dist/css/bootstrap.min.css" rel="stylesheet" />
+
+    <!-- ✅ your css -->
+    <link href="/app.css" rel="stylesheet" />
+
+    <link rel="icon" type="image/png" href="/favicon.png" />
+</head>
+
+<body>
+    <CascadingAuthenticationState>
+       <Routes @rendermode="InteractiveServer" />
+    </CascadingAuthenticationState>
+
+    <!-- ✅ correct for Blazor Web App (.NET 9) -->
+    <script src="/_framework/blazor.web.js"></script>
+</body>
+</html>

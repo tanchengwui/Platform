@@ -1,0 +1,297 @@
+﻿@page "/apps/{AppId:guid}"
+@using Platform.ServiceCenter.Services
+@inject ApiClient Api
+@inject TokenStore Tokens
+@inject NavigationManager Nav
+
+<h1>App Details</h1>
+
+@if (!Tokens.IsLoggedIn)
+{
+    <div class="alert alert-warning">
+        You are not logged in. Please <a href="/login">login</a> first.
+    </div>
+}
+
+@if (!string.IsNullOrWhiteSpace(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+<div class="mb-3">
+    <div><b>AppId:</b> <code>@AppId</code></div>
+</div>
+
+<div class="row g-4">
+    <div class="col-12 col-lg-6">
+        <h3>Draft</h3>
+        <Can Permission="APP_PUBLISH">
+        <ChildContent>
+            <button class="btn btn-primary" @onclick="CreateDraft" disabled="@busy">Create Draft</button>
+        </ChildContent>
+        <Denied>
+            <button class="btn btn-secondary" disabled title="No permission">No permission</button>
+        </Denied>
+    </Can>
+
+        @if (draftId is not null)
+
+        {
+            <div class="mt-3">
+                <div><b>DraftId:</b> <code>@draftId</code></div>
+
+                <h4 class="mt-3">Home Page</h4>
+                <div class="mb-2">
+                    <label class="form-label">Title</label>
+                    <input class="form-control" @bind="title" />
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Body</label>
+                    <textarea class="form-control" rows="5" @bind="body"></textarea>
+                </div>
+
+                <Can Permission="APP_PUBLISH">
+                    <ChildContent>
+                        <button class="btn btn-outline-primary" @onclick="SaveHome" disabled="@busy">Save Home</button>
+                    </ChildContent>
+                    <Denied>
+                        <button class="btn btn-secondary" disabled title="No permission">No permission</button>
+                    </Denied>
+                </Can>
+
+                <h4 class="mt-4">Publish</h4>
+                <div class="mb-2" style="max-width:220px">
+                    <label class="form-label">SemVer</label>
+                    <input class="form-control" @bind="semVer" />
+                </div>
+                <Can Permission="APP_PUBLISH">
+                    <ChildContent>
+                        <button class="btn btn-success" @onclick="Publish" disabled="@busy">Publish</button>
+                    </ChildContent>
+                    <Denied>
+                        <button class="btn btn-secondary" disabled title="No permission">No permission</button>
+                    </Denied>
+                </Can>
+
+                @if (appVersionId is not null)
+                {
+                    <div class="mt-2"><b>AppVersionId:</b> <code>@appVersionId</code></div>
+                }
+            </div>
+        }
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <h3>Deploy</h3>
+        <button class="btn btn-outline-secondary" @onclick="LoadEnvs" disabled="@busy">Load Environments</button>
+
+        @if (envs.Count > 0)
+        {
+            <div class="mt-3" style="max-width:420px">
+                <label class="form-label">Target Environment</label>
+                <select class="form-select" @bind="selectedEnvId">
+                    @foreach (var e in envs)
+                    {
+                        <option value="@e.EnvId">@e.Name (@e.Type)</option>
+                    }
+                </select>
+            </div>
+
+            <Can Permission="ENV_DEPLOY">
+            <ChildContent>
+                <button class="btn btn-success mt-3" @onclick="Deploy" disabled="@(busy || appVersionId is null)">Deploy</button>
+            </ChildContent>
+            <Denied>
+                <button class="btn btn-secondary mt-3" disabled title="No permission">No permission</button>
+            </Denied>
+        </Can>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(runtimeUrl))
+        {
+            <div class="mt-3">
+                <div><b>Runtime URL</b></div>
+                <a href="@runtimeUrl" target="_blank">@runtimeUrl</a>
+            </div>
+        }
+
+
+<div class="mt-4">
+    <div class="d-flex align-items-center gap-2">
+        <b>Deployments</b>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="RefreshDeployments" disabled="@(busy || selectedEnvId == Guid.Empty)">Refresh</button>
+    </div>
+
+    @if (deployments.Count == 0)
+    {
+        <div class="text-muted mt-2">No deployments loaded.</div>
+    }
+    else
+    {
+        <div class="table-responsive mt-2">
+            <table class="table table-sm table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Version</th>
+                        <th>Status</th>
+                        <th>Log</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var d in deployments)
+                    {
+                        <tr>
+                           <td style="white-space:nowrap">@d.StartedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                            <td style="white-space:nowrap">@d.SemVer (@d.BuildNo)</td>
+                            <td style="white-space:nowrap">@StatusText(d.Status)</td>
+                            <td style="max-width:360px">
+                                @if (!string.IsNullOrWhiteSpace(d.LogRef))
+                                {
+                                    <code>@d.LogRef</code>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+    </div>
+</div>
+@if (draftId is not null)
+{
+    <div class="mt-2 d-flex gap-2">
+        <a class="btn btn-outline-primary btn-sm"
+           href="@($"/apps/{AppId}/entities?draftId={draftId}")">
+            Entity Designer
+        </a>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid AppId { get; set; }
+
+    private bool busy;
+    private string? error;
+
+    private Guid? draftId;
+
+    private Guid? appVersionId;
+
+    private string title = "Hello Steven ðŸš€";
+    private string body = "Your platform is alive.";
+    private string semVer = "0.1.0";
+
+    private List<ApiClient.EnvironmentDto> envs = new();
+    private Guid selectedEnvId;
+    private string? runtimeUrl;
+
+    private List<ApiClient.DeploymentDto> deployments = new();
+
+    private async Task CreateDraft()
+    {
+        error = null;
+        busy = true;
+        runtimeUrl = null;
+        appVersionId = null;
+        try
+        {
+            var d = await Api.CreateDraftAsync(AppId);
+            draftId = d.DraftId;
+
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+
+    private async Task SaveHome()
+    {
+        if (draftId is null) { error = "Create draft first."; return; }
+
+        error = null;
+        busy = true;
+        try
+        {
+            await Api.SavePageAsync(draftId.Value, "Home", title, body);
+
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+
+    private async Task Publish()
+    {
+        if (draftId is null) { error = "Create draft first."; return; }
+
+        error = null;
+        busy = true;
+        runtimeUrl = null;
+        try
+        {
+            var pub = await Api.PublishAsync(draftId.Value, semVer);
+
+            appVersionId = pub.AppVersionId;
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+
+    private async Task LoadEnvs()
+    {
+        error = null;
+        busy = true;
+        try
+        {
+            envs = await Api.ListEnvironmentsAsync();
+            var dev = envs.FirstOrDefault(e => string.Equals(e.Name, "DEV", StringComparison.OrdinalIgnoreCase));
+            selectedEnvId = dev?.EnvId ?? envs.First().EnvId;
+            deployments = await Api.ListDeploymentsAsync(selectedEnvId, AppId);
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+
+
+private static string StatusText(int status)
+    => status switch
+    {
+        1 => "Queued",
+        2 => "Running",
+        3 => "Succeeded",
+        4 => "Failed",
+        _ => status.ToString()
+    };
+
+private async Task RefreshDeployments()
+{
+    if (selectedEnvId == Guid.Empty) return;
+    error = null;
+    busy = true;
+    try
+    {
+        deployments = await Api.ListDeploymentsAsync(selectedEnvId, AppId);
+    }
+    catch (Exception ex) { error = ex.Message; }
+    finally { busy = false; }
+}
+
+    private async Task Deploy()
+    {
+        if (appVersionId is null) { error = "Publish first."; return; }
+        error = null;
+        busy = true;
+        try
+        {
+            var dep = await Api.DeployAsync(selectedEnvId, appVersionId.Value);
+            runtimeUrl = dep.RuntimeUrlHint;
+            deployments = await Api.ListDeploymentsAsync(selectedEnvId, AppId);
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { busy = false; }
+    }
+}
+
+

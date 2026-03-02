@@ -1,0 +1,229 @@
+@page "/deployments"
+@using Platform.ServiceCenter.Services
+@inject ApiClient ApiClient
+
+<h1>Deployments</h1>
+
+<Can Permission="ENV_DEPLOY">
+    <ChildContent>
+        <div class="d-flex gap-2 mb-3">
+            <button class="btn btn-outline-secondary" @onclick="Reload" disabled="@Busy">Refresh</button>
+            <label class="form-label align-self-center mb-0">Take</label>
+            <input class="form-control" style="width:120px" type="number" min="10" max="200" @bind="Take" />
+            @if (!string.IsNullOrWhiteSpace(Message))
+            {
+                <span class="align-self-center">@Message</span>
+            }
+        </div>
+
+        <div class="row g-3">
+            <div class="col-lg-7">
+                <div class="card p-3">
+                    <h4 class="mb-3">Recent</h4>
+
+                    @if (DeploymentList.Count == 0)
+                    {
+                        <div>No deployments yet.</div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Started</th>
+                                        <th>Env</th>
+                                        <th>App</th>
+                                        <th>Version</th>
+                                        <th>Attempt</th>
+                                        <th>Status</th>
+                                        <th style="width:240px;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var d in DeploymentList)
+                                    {
+                                        <tr class="@(Selected?.DeploymentId == d.DeploymentId ? "table-primary" : "")">
+                                            <td>@d.StartedAt.LocalDateTime</td>
+                                            <td>@d.EnvId.ToString()[..8]</td>
+                                            <td>@d.AppId.ToString()[..8]</td>
+                                            <td>@d.SemVer (@d.BuildNo)</td>
+                                            <td>@d.Attempt</td>
+                                            <td>
+                                                @d.StatusText
+                                                @if (d.CancelRequested && d.Status is 1 or 2)
+                                                {
+                                                    <span class="badge bg-warning text-dark ms-1">Cancel requested</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-primary me-2" @onclick="() => Select(d)" disabled="@Busy">Logs</button>
+
+                                                @if (d.Status is 1 or 2)  @* Queued or Running *@
+                                                {
+                                                    <button class="btn btn-sm btn-outline-danger me-2"
+                                                            @onclick="() => Cancel(d)"
+                                                            disabled="@Busy || d.CancelRequested">
+                                                        Cancel
+                                                    </button>
+                                                }
+                                                @if (d.Status is 4 or 6) @* Failed or Canceled *@
+                                                {
+                                                    <button class="btn btn-sm btn-outline-success"
+                                                            @onclick="() => Retry(d)"
+                                                            disabled="@Busy">
+                                                        Retry
+                                                    </button>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="col-lg-5">
+                <div class="card p-3">
+                    <h4 class="mb-2">Logs</h4>
+
+                    @if (Selected is null)
+                    {
+                        <div>Select a deployment to view logs.</div>
+                    }
+                    else
+                    {
+                        <div class="mb-2">
+                            <div><b>DeploymentId:</b> @Selected.DeploymentId</div>
+                            <div><b>Status:</b> @Selected.StatusText</div>
+                            @if (!string.IsNullOrWhiteSpace(Selected.LogRef))
+                            {
+                                <div class="text-muted"><b>Last:</b> @Selected.LogRef</div>
+                            }
+                        </div>
+
+                        <div class="d-flex gap-2 mb-2">
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="ReloadLogs" disabled="@Busy">Refresh logs</button>
+                        </div>
+
+                        <div style="max-height:420px; overflow:auto; background:#111; color:#eee; padding:10px; border-radius:6px;">
+                            <pre style="white-space:pre-wrap; margin:0;">@LogText</pre>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </ChildContent>
+    <Denied>
+        <div class="alert alert-danger">You do not have permission to view deployments.</div>
+    </Denied>
+</Can>
+
+@code {
+    private bool Busy;
+    private string? Message;
+
+    private int Take = 50;
+    private List<ApiClient.DeploymentDto> DeploymentList = new();
+    private ApiClient.DeploymentDto? Selected;
+
+    private string LogText = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Reload();
+    }
+
+    private async Task Reload()
+    {
+        Busy = true;
+        Message = null;
+        try
+        {
+            DeploymentList = await ApiClient.RecentDeploymentsAsync(Take);
+
+            if (Selected is not null)
+            {
+                Selected = DeploymentList.FirstOrDefault(x => x.DeploymentId == Selected.DeploymentId) ?? Selected;
+            }
+        }
+        catch (Exception ex)
+        {
+            Message = ex.Message;
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    private async Task Select(ApiClient.DeploymentDto d)
+    {
+        Selected = d;
+        await ReloadLogs();
+    }
+
+    private async Task ReloadLogs()
+    {
+        if (Selected is null) return;
+
+        Busy = true;
+        Message = null;
+        try
+        {
+            var logs = await ApiClient.GetDeploymentLogsAsync(Selected.DeploymentId, 400);
+            LogText = string.Join("\n", logs.Select(l => $"{l.Timestamp.LocalDateTime:HH:mm:ss} [{l.Level}] {l.Message}"));
+        }
+        catch (Exception ex)
+        {
+            Message = ex.Message;
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    private async Task Cancel(ApiClient.DeploymentDto d)
+    {
+        Busy = true;
+        Message = null;
+        try
+        {
+            await ApiClient.CancelDeploymentAsync(d.DeploymentId);
+            Message = "Cancel requested.";
+            await Reload();
+            if (Selected?.DeploymentId == d.DeploymentId) await ReloadLogs();
+        }
+        catch (Exception ex)
+        {
+            Message = ex.Message;
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    private async Task Retry(ApiClient.DeploymentDto d)
+    {
+        Busy = true;
+        Message = null;
+        try
+        {
+            var res = await ApiClient.RetryDeploymentAsync(d.DeploymentId);
+            Message = $"Retry queued: {res.DeploymentId}";
+            await Reload();
+        }
+        catch (Exception ex)
+        {
+            Message = ex.Message;
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+}

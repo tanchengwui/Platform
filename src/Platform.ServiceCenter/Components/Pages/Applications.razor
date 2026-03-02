@@ -1,0 +1,191 @@
+@page "/apps"
+@using Platform.ServiceCenter.Services
+@implements IDisposable
+@inject ApiClient Api
+@inject TokenStore Tokens
+@inject NavigationManager Nav
+
+<h1>Apps</h1>
+
+@if (!Tokens.IsInitialized)
+{
+    <div class="alert alert-info">Initializing...</div>
+}
+else if (!Tokens.IsLoggedIn)
+{
+    <div class="alert alert-warning">
+        You are not logged in. Please <a href="/login">login</a> first.
+    </div>
+}
+else
+{
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <div class="alert alert-danger">@error</div>
+    }
+
+    @if (isBusy)
+    {
+        <div class="alert alert-info">Working...</div>
+    }
+
+    <div class="row g-4">
+        <div class="col-12 col-lg-7">
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <h3 class="m-0">Existing Apps</h3>
+                <button class="btn btn-sm btn-outline-primary" @onclick="Load" disabled="@isBusy">Refresh</button>
+            </div>
+
+            @if (apps is null)
+            {
+                <p>Loading...</p>
+            }
+            else
+            {
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Key</th>
+                            <th style="width:180px"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var a in apps)
+                        {
+                            <tr>
+                                <td>@a.Name</td>
+                                <td><code>@a.Key</code></td>
+                                <td>
+                                    <button class="btn btn-sm btn-primary" @onclick="() => Open(a.AppId)">Open</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+
+
+	        <Can Permission="APP_CREATE">
+	            <ChildContent>
+	                <div class="col-12 col-lg-5">
+	                    <h3>Create App</h3>
+	                    <div class="mb-2">
+	                        <label class="form-label">Key</label>
+	                        <input class="form-control" @bind="newKey" placeholder="demo3" />
+	                    </div>
+	                    <div class="mb-2">
+	                        <label class="form-label">Name</label>
+	                        <input class="form-control" @bind="newName" placeholder="Demo App" />
+	                    </div>
+	                    <button class="btn btn-success" type="button" disabled="@isBusy" @onclick="Create">Create</button>
+	                </div>
+	            </ChildContent>
+	            <Denied>
+	                <div class="col-12 col-lg-5">
+	                    <h3>Create App</h3>
+	                    <div class="alert alert-secondary">You don't have permission to create apps.</div>
+	                </div>
+	            </Denied>
+	        </Can>
+	    </div>
+}
+
+@code {
+    private List<ApiClient.AppDto>? apps;
+    private string newKey = "demo3";
+    private string newName = "Demo App 3";
+    private string? error;
+    private bool isBusy;
+
+    private bool _initialLoadTriggered;
+
+    protected override void OnInitialized()
+    {
+        Tokens.Changed += OnTokensChanged;
+    }
+
+    public void Dispose()
+    {
+        Tokens.Changed -= OnTokensChanged;
+    }
+
+    private void OnTokensChanged()
+    {
+        // If tokens become available after init/login, trigger first load
+        _ = InvokeAsync(async () =>
+        {
+            StateHasChanged();
+
+            if (Tokens.IsInitialized && Tokens.IsLoggedIn && !_initialLoadTriggered)
+            {
+                _initialLoadTriggered = true;
+                await Load();
+            }
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // Must run here because ProtectedLocalStorage uses JS interop
+        if (!Tokens.IsInitialized)
+            await Tokens.InitializeAsync();
+
+        if (Tokens.IsLoggedIn && !_initialLoadTriggered)
+        {
+            _initialLoadTriggered = true;
+            await Load();
+        }
+    }
+
+    private async Task Load()
+    {
+        if (!Tokens.IsLoggedIn) return;
+
+        error = null;
+        isBusy = true;
+        try
+        {
+            apps = await Api.ListAppsAsync();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message; // keep it readable
+        }
+        finally
+        {
+            isBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task Create()
+    {
+        if (!Tokens.IsLoggedIn) return;
+
+        error = null;
+        isBusy = true;
+        try
+        {
+            var created = await Api.CreateAppAsync(newKey, newName);
+            await Load();
+            Open(created.AppId);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private void Open(Guid appId)
+    {
+        Nav.NavigateTo($"/apps/{appId}");
+    }
+}

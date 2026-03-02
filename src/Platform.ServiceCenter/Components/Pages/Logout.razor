@@ -1,0 +1,15 @@
+@page "/logout"
+@inject Platform.ServiceCenter.Services.ApiClient Api
+@inject Platform.ServiceCenter.SimpleAuthStateProvider Auth
+@inject NavigationManager Nav
+
+<h3>Logging out...</h3>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        await Api.LogoutAsync();
+        Auth.SignOut();
+        Nav.NavigateTo("/login", forceLoad: true);
+    }
+}

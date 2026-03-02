@@ -1,0 +1,36 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    [Parameter, EditorRequired] public string Permission { get; set; } = default!;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? Denied { get; set; }
+
+    private bool _allowed;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (AuthenticationStateTask is null)
+        {
+            _allowed = false;
+            return;
+        }
+
+        var state = await AuthenticationStateTask;
+        var user = state.User;
+
+        // Admin can do all (and usually also has perm claims)
+        _allowed = user.IsInRole("Admin") || user.HasClaim("perm", Permission);
+    }
+}
+
+@if (_allowed)
+{
+    @ChildContent
+}
+else if (Denied is not null)
+{
+    @Denied
+}

@@ -1,0 +1,259 @@
+﻿@page "/apps/{AppId:guid}/entities"
+@using Platform.ServiceCenter.Services
+@inject ApiClient Api
+@inject NavigationManager Nav
+
+<h3>Entity Designer</h3>
+
+@if (!string.IsNullOrWhiteSpace(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+<div class="card p-3 mb-3">
+    <div><b>App:</b> @AppId</div>
+    <div><b>Draft:</b> @draftId</div>
+    <div class="mt-2">
+        <a class="btn btn-outline-secondary btn-sm" href="@($"/apps/{AppId}")">← Back to App Details</a>
+    </div>
+</div>
+
+@if (draftId is null)
+{
+    <div class="alert alert-warning">
+        Missing <code>draftId</code> query string. Open this page from App Details after creating a Draft.
+    </div>
+}
+else
+{
+    <div class="row">
+        <div class="col-12 col-lg-6">
+            <div class="card p-3 mb-3">
+                <h5>Create / Update Entity</h5>
+
+                <div class="mb-2">
+                    <label class="form-label">Entity Name</label>
+                    <input class="form-control" @bind="entityName" placeholder="Customer" />
+                </div>
+
+                <div class="mb-2">
+                    <label class="form-label">Fields (one per line: Name:Type[:required])</label>
+                    <textarea class="form-control" rows="8" @bind="fieldsText"
+                              placeholder="Name:string:required
+Age:int
+IsActive:bool
+CreatedAt:datetime"></textarea>
+                    <div class="form-text">
+                        Types: <code>string</code>, <code>int</code>, <code>decimal</code>, <code>bool</code>, <code>datetime</code>.
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button class="btn btn-primary" @onclick="SaveEntity" disabled="@busy">Save Entity</button>
+                    <button class="btn btn-outline-primary"
+                            @onclick="GenerateCrud"
+                            disabled="@busy || string.IsNullOrWhiteSpace(entityName)">
+                        Generate CRUD Pages
+                    </button>
+                    <button class="btn btn-outline-secondary" @onclick="Load" disabled="@busy">Refresh</button>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(status))
+                {
+                    <div class="mt-2 text-muted">@status</div>
+                }
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-6">
+            <div class="card p-3 mb-3">
+                <h5>Entities in Draft</h5>
+
+                @if (entities is null)
+                {
+                    <div class="text-muted">Loading...</div>
+                }
+                else if (entities.Count == 0)
+                {
+                    <div class="text-muted">No entities yet.</div>
+                }
+                else
+                {
+                    <ul class="list-group">
+                        @foreach (var e in entities)
+                        {
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <b>@e.Name</b>
+                                    <div class="text-muted small">
+                                        @string.Join(", ", e.Fields.Select(f => $"{f.Name}:{f.Type}{(f.Required ? "*" : "")}"))
+                                    </div>
+                                </div>
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => LoadIntoForm(e)">Edit</button>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+
+            <div class="alert alert-info">
+                After <b>Publish</b>, the API will create DB tables for all <code>ENTITY</code> definitions.<br />
+                After <b>Deploy + Runtime sync</b>, Runtime will materialize pages and CRUD will work.
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private Guid? selectedEntityId;
+    private Guid DraftGuid => Guid.TryParse(draftId?.ToString(), out var g) ? g : Guid.Empty;
+
+    [Parameter] public Guid AppId { get; set; }
+
+    private Guid? draftId;
+    private List<ApiClient.EntityDefDto>? entities;
+    private string entityName = "";
+    private string fieldsText = "";
+
+    private bool busy;
+    private string? error;
+    private string? status;
+    protected override async Task OnInitializedAsync()
+    {
+        draftId = TryGetDraftId();
+        if (draftId is not null)
+            await Load();
+    }
+
+    private Guid? TryGetDraftId()
+    {
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        var q = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+        var s = q.TryGetValue("draftId", out var v) ? v.ToString() : null;
+        return Guid.TryParse(s, out var id) ? id : null;
+    }
+
+    private async Task Load()
+    {
+        error = null;
+        status = null;
+        busy = true;
+        try
+        {
+            entities = await Api.ListDraftEntitiesAsync(draftId!.Value);
+
+            if (selectedEntityId is not null && entities is not null &&
+                !entities.Any(e => e.EntityId == selectedEntityId))
+            {
+                selectedEntityId = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private void LoadIntoForm(ApiClient.EntityDefDto e)
+    {
+        selectedEntityId = e.EntityId;
+        entityName = e.Name;
+        fieldsText = string.Join("\n",
+            e.Fields.Select(f => $"{f.Name}:{f.Type}{(f.Required ? ":required" : "")}"));
+    }
+
+    private static List<ApiClient.EntityFieldDto> ParseFields(string text)
+    {
+        var list = new List<ApiClient.EntityFieldDto>();
+        var lines = (text ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var line in lines)
+        {
+            var parts = line.Split(':', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length < 2) continue;
+            var name = parts[0];
+            var type = parts[1];
+            var required = parts.Length >= 3 && parts[2].Equals("required", StringComparison.OrdinalIgnoreCase);
+            list.Add(new ApiClient.EntityFieldDto(name: name, type: type, required: required));
+        }
+        return list;
+    }
+
+    private async Task SaveEntity()
+    {
+        if (draftId is null) return;
+
+        busy = true;
+        error = null;
+        status = null;
+
+        try
+        {
+            var name = entityName.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                error = "Entity name is required.";
+                return;
+            }
+
+            var def = new ApiClient.EntityDefDto(name, ParseFields(fieldsText));
+
+            // ✅ correct signature
+            await Api.UpsertDraftEntityAsync(draftId.Value, entityName.Trim(), def);
+
+            status = "Saved entity.";
+
+            // reload + pick the saved entityId
+            await Load();
+            selectedEntityId = entities?.FirstOrDefault(x =>
+                x.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.EntityId;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task GenerateCrud()
+    {
+        if (draftId is null)
+        {
+            error = "Missing draftId.";
+            return;
+        }
+        if (selectedEntityId is null)
+        {
+            error = "Please save/select an entity first.";
+            return;
+        }
+
+        busy = true;
+        error = null;
+        status = null;
+
+        try
+        {
+            // ✅ correct signature: (appId, draftId, entityId)
+            await Api.GenerateCrudAsync(draftId.Value, entityName.Trim());
+
+            status = "Generated CRUD pages: List / Create / Edit";
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}
+
+

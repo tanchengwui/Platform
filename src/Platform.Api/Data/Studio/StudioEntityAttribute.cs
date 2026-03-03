@@ -14,4 +14,6 @@ public sealed class StudioEntityAttribute
     public DateTimeOffset CreatedAt { get; set; }
 
     public StudioEntity? Entity { get; set; }
+
+    public int SortIndex { get; set; } = 0;
 }

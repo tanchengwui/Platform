@@ -142,6 +142,7 @@ public sealed class StudioEntityAttribute
     public int? Length { get; set; }
     public bool Required { get; set; } = false;
     public int Ordinal { get; set; } = 0;
+    public int SortIndex { get; set; } = 0;
 }
 
 public sealed class AppVersion

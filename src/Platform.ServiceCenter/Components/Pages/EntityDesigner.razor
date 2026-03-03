@@ -1,21 +1,23 @@
 ﻿@page "/apps/{AppId:guid}/entities"
+
 @using Platform.ServiceCenter.Services
 @inject ApiClient Api
 @inject NavigationManager Nav
 
-<h3>Entity Designer v2 - Git Test</h3>
+<h3 class="mb-3">Entity Designer</h3>
 
 @if (!string.IsNullOrWhiteSpace(error))
 {
     <div class="alert alert-danger">@error</div>
 }
 
-<div class="card p-3 mb-3">
-    <div><b>App:</b> @AppId</div>
-    <div><b>Draft:</b> @draftId</div>
-    <div class="mt-2">
-        <a class="btn btn-outline-secondary btn-sm" href="@($"/apps/{AppId}")">â† Back to App Details</a>
-    </div>
+<div class="mb-2 text-muted">
+    <div>App: <code>@AppId</code></div>
+    <div>Draft: <code>@(draftId?.ToString() ?? "(null)")</code></div>
+</div>
+
+<div class="mb-3">
+    <a class="btn btn-link p-0" href="@BackToAppDetailsUrl">← Back to App Details</a>
 </div>
 
 @if (draftId is null)
@@ -26,98 +28,214 @@
 }
 else
 {
-    <div class="row">
-        <div class="col-12 col-lg-6">
-            <div class="card p-3 mb-3">
-                <h5>Create / Update Entity</h5>
-
-                <div class="mb-2">
-                    <label class="form-label">Entity Name</label>
-                    <input class="form-control" @bind="entityName" placeholder="Customer" />
-                </div>
-
-                <div class="mb-2">
-                    <label class="form-label">Fields (one per line: Name:Type[:required])</label>
-                    <textarea class="form-control" rows="8" @bind="fieldsText"
-                              placeholder="Name:string:required
-Age:int
-IsActive:bool
-CreatedAt:datetime"></textarea>
-                    <div class="form-text">
-                        Types: <code>string</code>, <code>int</code>, <code>decimal</code>, <code>bool</code>, <code>datetime</code>.
-                    </div>
-                </div>
-
-                <div class="d-flex gap-2">
-                    <button class="btn btn-primary" @onclick="SaveEntity" disabled="@busy">Save Entity</button>
-                    <button class="btn btn-outline-primary"
-                            @onclick="GenerateCrud"
-                            disabled="@busy || selectedEntityId is null">
-                        Generate CRUD Pages
+    <div class="row g-3">
+        <!-- LEFT: Entity list -->
+        <div class="col-12 col-lg-4">
+            <div class="card">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <span class="fw-bold">Entities in Draft</span>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="Load" disabled="@busy">
+                        Refresh
                     </button>
-                    <button class="btn btn-outline-secondary" @onclick="Load" disabled="@busy">Refresh</button>
                 </div>
-
-                @if (!string.IsNullOrWhiteSpace(status))
-                {
-                    <div class="mt-2 text-muted">@status</div>
-                }
+                <div class="card-body">
+                    @if (entities is null)
+                    {
+                        <div>Loading...</div>
+                    }
+                    else if (entities.Count == 0)
+                    {
+                        <div class="text-muted">No entities yet.</div>
+                    }
+                    else
+                    {
+                        <div class="list-group">
+                            @foreach (var e in entities)
+                            {
+                                var active = selectedEntityId == e.EntityId;
+                                <button type="button"
+                                        class="list-group-item list-group-item-action @(active ? "active" : "")"
+                                        @onclick="(() => LoadIntoForm(e))">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div class="fw-semibold">@e.Name</div>
+                                        <span class="badge text-bg-secondary">@e.Fields.Count</span>
+                                    </div>
+                                    <div class="small @(active ? "text-white-50" : "text-muted")">
+                                        @string.Join(", ", e.Fields.Take(4).Select(f => $"{f.Name}:{f.Type}{(f.Required ? "*" : "")}"))
+                                        @if (e.Fields.Count > 4)
+                                        {
+                                            <span>…</span>
+                                        }
+                                    </div>
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
             </div>
         </div>
 
-        <div class="col-12 col-lg-6">
-            <div class="card p-3 mb-3">
-                <h5>Entities in Draft</h5>
+        <!-- RIGHT: Entity editor -->
+        <div class="col-12 col-lg-8">
+            <div class="card">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <span class="fw-bold">Create / Update Entity</span>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-primary" @onclick="SaveEntity" disabled="@busy">Save Entity</button>
+                        <button class="btn btn-sm btn-success" @onclick="GenerateCrud" disabled="@busy">Generate CRUD Pages</button>
+                    </div>
+                </div>
 
-                @if (entities is null)
-                {
-                    <div class="text-muted">Loading...</div>
-                }
-                else if (entities.Count == 0)
-                {
-                    <div class="text-muted">No entities yet.</div>
-                }
-                else
-                {
-                    <ul class="list-group">
-                        @foreach (var e in entities)
-                        {
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                <div>
-                                    <b>@e.Name</b>
-                                    <div class="text-muted small">
-                                        @string.Join(", ", e.Fields.Select(f => $"{f.Name}:{f.Type}{(f.Required ? "*" : "")}"))
-                                    </div>
+                <div class="card-body">
+                    @if (!string.IsNullOrWhiteSpace(status))
+                    {
+                        <div class="alert alert-success">@status</div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label">Entity Name</label>
+                        <input class="form-control"
+                               @bind="entityName"
+                               @bind:event="oninput"
+                               placeholder="e.g. Customer"
+                               disabled="@busy" />
+                    </div>
+
+                    <hr />
+
+                    <!-- Add Field -->
+                    <div class="row g-2 align-items-end mb-3">
+                        <div class="col-12 col-md-5">
+                            <label class="form-label">Field Name</label>
+                            <input class="form-control"
+                                   @bind="newFieldName"
+                                   @bind:event="oninput"
+                                   placeholder="e.g. FirstName"
+                                   disabled="@busy" />
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Type</label>
+                            <select class="form-select" @bind="newFieldType" disabled="@busy">
+                                <option value="string">string</option>
+                                <option value="int">int</option>
+                                <option value="decimal">decimal</option>
+                                <option value="bool">bool</option>
+                                <option value="datetime">datetime</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="req" @bind="newFieldRequired" disabled="@busy" />
+                                <label class="form-check-label" for="req">Required</label>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-1 d-grid">
+                            <button class="btn btn-outline-primary" @onclick="AddField" disabled="@busy">Add</button>
+                        </div>
+                    </div>
+
+                    <!-- Drag-drop field list -->
+                    <div class="mb-2 d-flex justify-content-between align-items-center">
+                        <div class="fw-semibold">Fields (drag to reorder)</div>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="ClearFields" disabled="@busy">Clear</button>
+                    </div>
+
+                    @if (fields.Count == 0)
+                    {
+                        <div class="text-muted">No fields yet. Add fields above, or paste below and parse.</div>
+                    }
+                    else
+                    {
+                        <div class="list-group">
+                            @for (var i = 0; i < fields.Count; i++)
+                            {
+                                var f = fields[i];
+                               <div class="list-group-item d-flex align-items-center gap-2"
+                                 draggable="true"
+                                 @key="f.AttributeId" 
+                                 @ondragstart="(() => OnDragStart(i))"
+                                 @ondragenter:preventDefault="true"
+                                 @ondragover:preventDefault="true"
+                                 @ondrop:preventDefault="true"
+                                 @ondrop="(() => OnDrop(i))"
+                                 style="cursor: grab;">
+                                <span class="text-muted" title="Drag handle">☰</span>
+
+                                <div class="flex-grow-1">
+                                    <div class="fw-semibold">@f.Name</div>
+                                    <div class="small text-muted">@f.Type @(f.Required ? "(required)" : "")</div>
                                 </div>
-                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => LoadIntoForm(e)">Edit</button>
-                            </li>
-                        }
-                    </ul>
-                }
-            </div>
 
-            <div class="alert alert-info">
-                After <b>Publish</b>, the API will create DB tables for all <code>ENTITY</code> definitions.<br />
-                After <b>Deploy + Runtime sync</b>, Runtime will materialize pages and CRUD will work.
+                                <button class="btn btn-sm btn-outline-danger"
+                                        title="Remove field"
+                                        @onclick="(() => RemoveField(i))"
+                                        disabled="@busy">
+                                    ✕
+                                </button>
+                            </div>
+                            }
+                        </div>
+                    }
+
+                    <hr />
+
+                    <!-- Optional: bulk paste parser -->
+                    <div class="mb-2 fw-semibold">Bulk paste (optional)</div>
+                    <div class="small text-muted mb-2">
+                        One per line: <code>Name:Type[:required]</code> (Types: string, int, decimal, bool, datetime)
+                    </div>
+
+                    <textarea class="form-control" rows="6" @bind="fieldsText" disabled="@busy"></textarea>
+
+                    <div class="mt-2 d-flex gap-2">
+                        <button class="btn btn-outline-secondary" @onclick="SyncTextFromFields" disabled="@busy">
+                            Copy from list → text
+                        </button>
+                        <button class="btn btn-outline-secondary" @onclick="ParseTextIntoFields" disabled="@busy">
+                            Parse text → list
+                        </button>
+                    </div>
+
+                    <hr />
+                    <div class="text-muted small">
+                        After Publish, the API will create DB tables for all <code>ENTITY</code> definitions.
+                        After Deploy + Runtime sync, Runtime will materialize pages and CRUD will work.
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 }
 
 @code {
-    private Guid? selectedEntityId;
-    private Guid DraftGuid => Guid.TryParse(draftId?.ToString(), out var g) ? g : Guid.Empty;
-
     [Parameter] public Guid AppId { get; set; }
 
     private Guid? draftId;
     private List<ApiClient.EntityDefDto>? entities;
+
+    private Guid? selectedEntityId;
+
     private string entityName = "";
+    private List<ApiClient.EntityFieldDto> fields = new();
+
+    private string newFieldName = "";
+    private string newFieldType = "string";
+    private bool newFieldRequired = false;
+
+    // Optional bulk text
     private string fieldsText = "";
 
     private bool busy;
     private string? error;
     private string? status;
+
+    private int? draggedIndex;
+
+    private string BackToAppDetailsUrl
+        => draftId is null
+            ? $"/apps/{AppId}"
+            : $"/apps/{AppId}?draftId={draftId}";
+
     protected override async Task OnInitializedAsync()
     {
         draftId = TryGetDraftId();
@@ -138,14 +256,17 @@ CreatedAt:datetime"></textarea>
         error = null;
         status = null;
         busy = true;
+
         try
         {
             entities = await Api.ListDraftEntitiesAsync(draftId!.Value);
 
-            if (selectedEntityId is not null && entities is not null &&
-                !entities.Any(e => e.EntityId == selectedEntityId))
+            // If selected entity disappeared after refresh
+            if (selectedEntityId is not null && entities is not null && !entities.Any(e => e.EntityId == selectedEntityId))
             {
                 selectedEntityId = null;
+                entityName = "";
+                fields = new();
             }
         }
         catch (Exception ex)
@@ -162,24 +283,128 @@ CreatedAt:datetime"></textarea>
     {
         selectedEntityId = e.EntityId;
         entityName = e.Name;
-        fieldsText = string.Join("\n",
-            e.Fields.Select(f => $"{f.Name}:{f.Type}{(f.Required ? ":required" : "")}"));
+
+        // clone list to avoid editing the list instance inside entities
+        fields = e.Fields
+            .Select(f => new ApiClient.EntityFieldDto(
+                attributeId: f.AttributeId,
+                entityId: f.EntityId,
+                name: f.Name,
+                type: f.Type,
+                length: f.Length,
+                required: f.Required))
+            .ToList();
+
+        SyncTextFromFields();
+        status = null;
+        error = null;
+    }
+
+    private void AddField()
+    {
+        error = null;
+        status = null;
+
+        var name = (newFieldName ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            error = "Field name is required.";
+            return;
+        }
+
+        // Basic duplicate guard (case-insensitive)
+        if (fields.Any(f => f.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+        {
+            error = $"Field '{name}' already exists.";
+            return;
+        }
+
+        fields.Add(new ApiClient.EntityFieldDto(name: name, type: newFieldType, required: newFieldRequired));
+
+        newFieldName = "";
+        newFieldType = "string";
+        newFieldRequired = false;
+
+        SyncTextFromFields();
+    }
+
+    private void RemoveField(int index)
+    {
+        if (index < 0 || index >= fields.Count) return;
+        fields.RemoveAt(index);
+        SyncTextFromFields();
+    }
+
+    private void ClearFields()
+    {
+        fields = new();
+        fieldsText = "";
+        status = null;
+        error = null;
+    }
+
+    private void OnDragStart(int index) => draggedIndex = index;
+
+            private void OnDrop(int targetIndex)
+        {
+            if (draggedIndex is null) return;
+
+            var from = draggedIndex.Value;
+            draggedIndex = null; // <-- reset immediately
+
+            var to = targetIndex;
+
+            if (from == to) return;
+            if (from < 0 || from >= fields.Count) return;
+            if (to < 0 || to >= fields.Count) return;
+
+            var item = fields[from];
+            fields.RemoveAt(from);
+
+            if (from < to) to--;
+
+            fields.Insert(to, item);
+
+            SyncTextFromFields();
+        }
+
+    private void SyncTextFromFields()
+    {
+        fieldsText = string.Join("\n", fields.Select(f => $"{f.Name}:{f.Type}{(f.Required ? ":required" : "")}"));
     }
 
     private static List<ApiClient.EntityFieldDto> ParseFields(string text)
     {
         var list = new List<ApiClient.EntityFieldDto>();
         var lines = (text ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
         foreach (var line in lines)
         {
             var parts = line.Split(':', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             if (parts.Length < 2) continue;
+
             var name = parts[0];
             var type = parts[1];
             var required = parts.Length >= 3 && parts[2].Equals("required", StringComparison.OrdinalIgnoreCase);
+
             list.Add(new ApiClient.EntityFieldDto(name: name, type: type, required: required));
         }
+
         return list;
+    }
+
+    private void ParseTextIntoFields()
+    {
+        error = null;
+        status = null;
+
+        var parsed = ParseFields(fieldsText);
+
+        // De-dupe by name (first wins), case-insensitive
+        fields = parsed
+            .GroupBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .ToList();
     }
 
     private async Task SaveEntity()
@@ -192,24 +417,27 @@ CreatedAt:datetime"></textarea>
 
         try
         {
-            var name = entityName.Trim();
+            var name = (entityName ?? "").Trim();
             if (string.IsNullOrWhiteSpace(name))
             {
                 error = "Entity name is required.";
                 return;
             }
 
-            var def = new ApiClient.EntityDefDto(name, ParseFields(fieldsText));
+            if (fields.Count == 0)
+            {
+                error = "Please add at least 1 field.";
+                return;
+            }
 
-            // ✅ correct signature
-            await Api.UpsertDraftEntityAsync(draftId.Value, entityName.Trim(), def);
+            var def = new ApiClient.EntityDefDto(name, fields);
+
+            await Api.UpsertDraftEntityAsync(draftId.Value, name, def);
 
             status = "Saved entity.";
-
-            // reload + pick the saved entityId
             await Load();
-            selectedEntityId = entities?.FirstOrDefault(x =>
-                x.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.EntityId;
+
+            selectedEntityId = entities?.FirstOrDefault(x => x.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.EntityId;
         }
         catch (Exception ex)
         {
@@ -228,6 +456,15 @@ CreatedAt:datetime"></textarea>
             error = "Missing draftId.";
             return;
         }
+
+        var name = (entityName ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            error = "Entity name is required.";
+            return;
+        }
+
+        // We still enforce "save first" (so server has the definition)
         if (selectedEntityId is null)
         {
             error = "Please save/select an entity first.";
@@ -240,9 +477,7 @@ CreatedAt:datetime"></textarea>
 
         try
         {
-            // ✅ correct signature: (appId, draftId, entityId)
-            await Api.GenerateCrudAsync(draftId.Value, entityName.Trim());
-
+            await Api.GenerateCrudAsync(draftId.Value, name);
             status = "Generated CRUD pages: List / Create / Edit";
         }
         catch (Exception ex)
@@ -255,5 +490,3 @@ CreatedAt:datetime"></textarea>
         }
     }
 }
-
-

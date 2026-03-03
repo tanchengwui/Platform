@@ -50,5 +50,7 @@ public sealed class PlatformDbContext : DbContext
 
         modelBuilder.Entity<StudioEntity>().HasIndex(x => new { x.TenantId, x.AppId, x.Name }).IsUnique();
         modelBuilder.Entity<StudioEntityAttribute>().HasIndex(x => new { x.TenantId, x.AppId, x.EntityId, x.Name }).IsUnique();
+
+        modelBuilder.Entity<StudioEntityAttribute>().Property(x => x.SortIndex).HasDefaultValue(0);
     }
 }

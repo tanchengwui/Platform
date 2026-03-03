@@ -14,7 +14,6 @@ public sealed class AppDataProvisioner
 {
     private readonly PlatformDbContext _db;
 
-
     public AppDataProvisioner(PlatformDbContext db) => _db = db;
 
     public sealed record EntityField(string Name, string Type = "string", bool Required = false, int? Length = null);

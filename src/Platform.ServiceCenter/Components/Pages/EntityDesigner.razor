@@ -14,7 +14,7 @@
     <div><b>App:</b> @AppId</div>
     <div><b>Draft:</b> @draftId</div>
     <div class="mt-2">
-        <a class="btn btn-outline-secondary btn-sm" href="@($"/apps/{AppId}")">← Back to App Details</a>
+        <a class="btn btn-outline-secondary btn-sm" href="@($"/apps/{AppId}")">â† Back to App Details</a>
     </div>
 </div>
 
@@ -52,7 +52,7 @@ CreatedAt:datetime"></textarea>
                     <button class="btn btn-primary" @onclick="SaveEntity" disabled="@busy">Save Entity</button>
                     <button class="btn btn-outline-primary"
                             @onclick="GenerateCrud"
-                            disabled="@busy || string.IsNullOrWhiteSpace(entityName)">
+                            disabled="@busy || selectedEntityId is null">
                         Generate CRUD Pages
                     </button>
                     <button class="btn btn-outline-secondary" @onclick="Load" disabled="@busy">Refresh</button>

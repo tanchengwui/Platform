@@ -120,9 +120,9 @@ public sealed class RuntimeMaterializer
             pageKeys.Add(key);
 
             var json = ReadText(zip, e.FullName);
-            var (title, bodyText) = ParseSimplePage(json);
+            // replaced by BuildHtmlForPage
 
-            var html = BuildHtml(title ?? key, bodyText ?? "");
+            var html = BuildHtmlForPage(key, json);
             await File.WriteAllTextAsync(Path.Combine(outputDir, $"{key}.html"), html, Encoding.UTF8, ct);
         }
 
@@ -238,6 +238,41 @@ public sealed class RuntimeMaterializer
             CopyDirectory(d, Path.Combine(dst, name), overwrite);
         }
     }
+
+private static string BuildHtmlForPage(string pageKey, string json)
+{
+    if (string.IsNullOrWhiteSpace(json))
+        return BuildHtml(pageKey, "");
+
+    try
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        var kind = root.TryGetProperty("kind", out var k) && k.ValueKind == JsonValueKind.String
+            ? k.GetString()
+            : null;
+
+        if (string.IsNullOrWhiteSpace(kind))
+        {
+            var (title, body) = ParseSimplePage(json);
+            return BuildHtml(title ?? pageKey, body ?? "");
+        }
+
+        return kind switch
+        {
+            "CRUD_LIST" => BuildHtml(pageKey, "<h2>CRUD LIST</h2>"),
+            "CRUD_CREATE" => BuildHtml(pageKey, "<h2>CRUD CREATE</h2>"),
+            "CRUD_EDIT" => BuildHtml(pageKey, "<h2>CRUD EDIT</h2>"),
+            _ => BuildHtml(pageKey, json)
+        };
+    }
+    catch
+    {
+        return BuildHtml(pageKey, json);
+    }
+}
+
 }
 
 

@@ -217,11 +217,11 @@ public sealed class DataController : ControllerBase
 
         return a.Type switch
         {
-            "Guid" => v.ValueKind == JsonValueKind.String && Guid.TryParse(v.GetString(), out var g) ? g : null,
-            "Int32" => v.TryGetInt32(out var i) ? i : null,
-            "Boolean" => v.ValueKind == JsonValueKind.True ? true : v.ValueKind == JsonValueKind.False ? false : (bool?)null,
-            "DateTimeOffset" => v.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(v.GetString(), out var dto) ? dto : null,
-            "Decimal" => v.TryGetDecimal(out var d) ? d : null,
+            "int" => v.TryGetInt32(out var i) ? i : null,
+            "bool" => v.ValueKind == JsonValueKind.True ? true :
+                      v.ValueKind == JsonValueKind.False ? false : (bool?)null,
+            "datetime" => v.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(v.GetString(), out var dto) ? dto : null,
+            "decimal" => v.TryGetDecimal(out var d) ? d : null,
             _ => v.ValueKind == JsonValueKind.String ? v.GetString() : v.ToString()
         };
     }
